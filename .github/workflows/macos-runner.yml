@@ -1,0 +1,62 @@
+name: macOS test runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner image
+        type: choice
+        default: macos-15
+        options:
+          - macos-15
+          - macos-13
+      timeout_minutes:
+        description: Keep the runner alive for at most this many minutes
+        type: string
+        default: "60"
+
+jobs:
+  bench:
+    name: Remote macOS bench
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
+
+    steps:
+      - name: Runner info
+        run: |
+          uname -a
+          sw_vers
+          echo "user: $(whoami)"
+
+      - name: Tailscale up
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci-macos
+          args: --ssh
+
+      - name: Enable Screen Sharing
+        env:
+          VNC_PASSWORD: ${{ secrets.VNC_PASSWORD }}
+        run: |
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -setvncpw -vncpw "$VNC_PASSWORD" \
+            -restart -agent -privs -all
+
+      - name: Print endpoint
+        run: |
+          TS_IP=$(tailscale ip -4 | head -n1)
+          echo "::notice title=macOS runner ready::$(whoami)@${TS_IP}"
+
+      - name: Wait for /tmp/done
+        run: |
+          MAX=$(( ${{ inputs.timeout_minutes }} * 60 ))
+          WAITED=0
+          while [ "$WAITED" -lt "$MAX" ]; do
+            [ -f /tmp/done ] && exit 0
+            sleep 15
+            WAITED=$((WAITED + 15))
+          done
