@@ -46,6 +46,12 @@ jobs:
             -setvncpw -vncpw "$VNC_PASSWORD" \
             -restart -agent -privs -all
 
+      - name: Install bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          # cover non-interactive ssh too (installer only writes .zshrc/.bashrc)
+          echo 'export PATH="$HOME/.bun/bin:$PATH"' >> ~/.zshenv
+
       - name: Print endpoint
         run: |
           TS_IP=$(tailscale ip -4 | head -n1)
